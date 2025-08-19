@@ -3,9 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:sizer/sizer.dart';
 
 import '../../core/app_export.dart';
-import './widgets/add_profile_card_widget.dart';
 import './widgets/empty_state_widget.dart';
-import './widgets/profile_card_widget.dart';
 import './widgets/profile_context_menu_widget.dart';
 
 class ProfileSelectionScreen extends StatefulWidget {
@@ -22,45 +20,8 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
   bool isLoading = false;
   bool isRefreshing = false;
 
-  // Mock profiles data
-  final List<Map<String, dynamic>> profiles = [
-    {
-      "id": "1",
-      "name": "Rajesh Kumar",
-      "relationship": "Self",
-      "type": "patient",
-      "avatarUrl":
-          "https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=400",
-      "medicationCount": 5,
-      "isActive": true,
-      "lastSync": DateTime.now().subtract(const Duration(minutes: 15)),
-      "permissions": ["read", "write", "delete"],
-    },
-    {
-      "id": "2",
-      "name": "Sunita Devi",
-      "relationship": "Mother",
-      "type": "caregiver",
-      "avatarUrl":
-          "https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=400",
-      "medicationCount": 8,
-      "isActive": false,
-      "lastSync": DateTime.now().subtract(const Duration(hours: 2)),
-      "permissions": ["read"],
-    },
-    {
-      "id": "3",
-      "name": "Amit Sharma",
-      "relationship": "Spouse",
-      "type": "caregiver",
-      "avatarUrl":
-          "https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?auto=compress&cs=tinysrgb&w=400",
-      "medicationCount": 3,
-      "isActive": false,
-      "lastSync": DateTime.now().subtract(const Duration(hours: 1)),
-      "permissions": ["read", "write"],
-    },
-  ];
+  // Clean profiles list - removed all random/demo profiles
+  final List<Map<String, dynamic>> profiles = [];
 
   @override
   void initState() {
@@ -239,85 +200,10 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
       ),
       body: Stack(
         children: [
-          // Main Content
-          profiles.isEmpty
-              ? EmptyStateWidget(
-                  onAddProfile: _navigateToAddProfile,
-                )
-              : RefreshIndicator(
-                  onRefresh: _refreshProfiles,
-                  color: AppTheme.lightTheme.colorScheme.primary,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 2.h),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Header Text
-                          Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 4.w),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Choose a profile to continue',
-                                  style: AppTheme
-                                      .lightTheme.textTheme.titleMedium
-                                      ?.copyWith(
-                                    fontSize: 16.sp,
-                                    fontWeight: FontWeight.w500,
-                                    color: AppTheme.lightTheme.colorScheme
-                                        .onSurfaceVariant,
-                                  ),
-                                ),
-                                SizedBox(height: 1.h),
-                                Text(
-                                  'Manage medications for yourself or your loved ones',
-                                  style: AppTheme
-                                      .lightTheme.textTheme.bodyMedium
-                                      ?.copyWith(
-                                    fontSize: 13.sp,
-                                    color: AppTheme
-                                        .lightTheme.colorScheme.onSurfaceVariant
-                                        .withValues(alpha: 0.8),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          SizedBox(height: 3.h),
-
-                          // Profile Cards
-                          ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: profiles.length,
-                            itemBuilder: (context, index) {
-                              final profile = profiles[index];
-                              return ProfileCardWidget(
-                                profile: profile,
-                                isSelected: selectedProfileId == profile['id'],
-                                onTap: () => _selectProfile(profile['id']),
-                                onLongPress: () => _showContextMenu(profile),
-                              );
-                            },
-                          ),
-
-                          SizedBox(height: 2.h),
-
-                          // Add New Profile Card
-                          AddProfileCardWidget(
-                            onTap: _navigateToAddProfile,
-                          ),
-
-                          SizedBox(height: 4.h),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+          // Main Content - Always show empty state since profiles list is now empty
+          EmptyStateWidget(
+            onAddProfile: _navigateToAddProfile,
+          ),
 
           // Context Menu Overlay
           if (showContextMenu && contextMenuProfile != null)
@@ -359,29 +245,8 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
         ],
       ),
 
-      // Quick Profile Switch FAB
-      floatingActionButton: profiles.length > 1
-          ? FloatingActionButton(
-              onPressed: () {
-                // Quick switch to next profile
-                final currentIndex =
-                    profiles.indexWhere((p) => p['id'] == selectedProfileId);
-                final nextIndex = (currentIndex + 1) % profiles.length;
-                _selectProfile(profiles[nextIndex]['id']);
-              },
-              backgroundColor:
-                  AppTheme.lightTheme.floatingActionButtonTheme.backgroundColor,
-              foregroundColor:
-                  AppTheme.lightTheme.floatingActionButtonTheme.foregroundColor,
-              child: CustomIconWidget(
-                iconName: 'swap_horiz',
-                color: AppTheme
-                        .lightTheme.floatingActionButtonTheme.foregroundColor ??
-                    Colors.white,
-                size: 6.w,
-              ),
-            )
-          : null,
+      // Remove FAB since no profiles exist
+      floatingActionButton: null,
     );
   }
 }

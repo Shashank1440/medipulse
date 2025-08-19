@@ -12,6 +12,7 @@ import 'package:sizer/sizer.dart';
 
 import '../core/app_export.dart';
 import '../widgets/custom_error_widget.dart';
+import './services/supabase_service.dart';
 
 var backendURL = "https://medipulse2908back.builtwithrocket.new/log-error";
 
@@ -20,6 +21,13 @@ void main() async {
     _sendOverflowError(details);
   };
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Supabase
+  try {
+    await SupabaseService.initialize();
+  } catch (e) {
+    debugPrint('Failed to initialize Supabase: $e');
+  }
 
   // 🚨 CRITICAL: Custom error handling - DO NOT REMOVE
   ErrorWidget.builder = (FlutterErrorDetails details) {
