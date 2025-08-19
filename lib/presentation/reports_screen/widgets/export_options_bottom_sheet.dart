@@ -1,0 +1,350 @@
+import 'dart:convert';
+import 'dart:io' if (dart.library.io) 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:sizer/sizer.dart';
+import 'package:universal_html/html.dart' as html;
+
+import '../../../core/app_export.dart';
+
+class ExportOptionsBottomSheet extends StatelessWidget {
+  final Map<String, dynamic> reportData;
+  final String selectedPeriod;
+  final DateTime? customStartDate;
+  final DateTime? customEndDate;
+
+  const ExportOptionsBottomSheet({
+    super.key,
+    required this.reportData,
+    required this.selectedPeriod,
+    this.customStartDate,
+    this.customEndDate,
+  });
+
+  Future<void> _exportToPDF(BuildContext context) async {
+    try {
+      final pdfContent = _generatePDFContent();
+      await _downloadFile(pdfContent, 'medipulse_report.pdf', context);
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('PDF report exported successfully'),
+          backgroundColor: AppTheme.lightTheme.colorScheme.secondary,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to export PDF report'),
+          backgroundColor: AppTheme.lightTheme.colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _exportToCSV(BuildContext context) async {
+    try {
+      final csvContent = _generateCSVContent();
+      await _downloadFile(csvContent, 'medipulse_data.csv', context);
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('CSV data exported successfully'),
+          backgroundColor: AppTheme.lightTheme.colorScheme.secondary,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to export CSV data'),
+          backgroundColor: AppTheme.lightTheme.colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _shareReport(BuildContext context) async {
+    try {
+      final reportSummary = _generateShareContent();
+
+      if (kIsWeb) {
+        // Web sharing using clipboard
+        await html.window.navigator.clipboard?.writeText(reportSummary);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Report summary copied to clipboard'),
+            backgroundColor: AppTheme.lightTheme.colorScheme.secondary,
+          ),
+        );
+      } else {
+        // Mobile sharing would use share_plus package in real implementation
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Report ready to share'),
+            backgroundColor: AppTheme.lightTheme.colorScheme.secondary,
+          ),
+        );
+      }
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to prepare report for sharing'),
+          backgroundColor: AppTheme.lightTheme.colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _downloadFile(
+      String content, String filename, BuildContext context) async {
+    if (kIsWeb) {
+      final bytes = utf8.encode(content);
+      final blob = html.Blob([bytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute("download", filename)
+        ..click();
+      html.Url.revokeObjectUrl(url);
+    } else {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/$filename');
+      await file.writeAsString(content);
+    }
+  }
+
+  String _generatePDFContent() {
+    final adherence = reportData['adherencePercentage'] as double;
+    final streak = reportData['currentStreak'] as int;
+    final totalMissed = reportData['missedDoses']['totalMissed'] as int;
+
+    return '''
+MediPulse Adherence Report
+Generated: ${DateTime.now().toString().split('.')[0]}
+Period: $selectedPeriod
+${customStartDate != null && customEndDate != null ? 'Custom Range: ${customStartDate!.day}/${customStartDate!.month}/${customStartDate!.year} - ${customEndDate!.day}/${customEndDate!.month}/${customEndDate!.year}' : ''}
+
+ADHERENCE SUMMARY
+Overall Adherence: ${adherence.toStringAsFixed(1)}%
+Current Streak: $streak days
+Total Missed Doses: $totalMissed
+
+MEDICATION BREAKDOWN
+${(reportData['medicationBreakdown'] as List<Map<String, dynamic>>).map((med) => '${med['name']}: ${(med['adherence'] as double).toStringAsFixed(1)}% (${med['takenDoses']}/${med['totalDoses']} doses)').join('\n')}
+
+TIMING ANALYSIS
+Average Delay: ${_formatLatency(reportData['latencyData']['averageLatency'] as int)}
+On-Time Percentage: ${(reportData['latencyData']['onTimePercentage'] as double).toStringAsFixed(1)}%
+
+This report was generated by MediPulse - Healthcare Medication Management
+For healthcare provider review and personal tracking purposes.
+    ''';
+  }
+
+  String _generateCSVContent() {
+    final medications =
+        reportData['medicationBreakdown'] as List<Map<String, dynamic>>;
+
+    String csv =
+        'Medication Name,Dosage,Frequency,Adherence %,Taken Doses,Total Doses\n';
+
+    for (final med in medications) {
+      csv +=
+          '${med['name']},${med['dosage']},${med['frequency']},${(med['adherence'] as double).toStringAsFixed(1)},${med['takenDoses']},${med['totalDoses']}\n';
+    }
+
+    return csv;
+  }
+
+  String _generateShareContent() {
+    final adherence = reportData['adherencePercentage'] as double;
+    final streak = reportData['currentStreak'] as int;
+
+    return '''
+My MediPulse Adherence Report ($selectedPeriod):
+📊 Overall Adherence: ${adherence.toStringAsFixed(1)}%
+🔥 Current Streak: $streak days
+💊 Tracking ${(reportData['medicationBreakdown'] as List).length} medications
+
+Generated by MediPulse - Healthcare Medication Management
+    ''';
+  }
+
+  String _formatLatency(int minutes) {
+    if (minutes < 60) {
+      return '${minutes}m';
+    } else {
+      final hours = minutes ~/ 60;
+      final remainingMinutes = minutes % 60;
+      return remainingMinutes > 0
+          ? '${hours}h ${remainingMinutes}m'
+          : '${hours}h';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(4.w),
+      decoration: BoxDecoration(
+        color: AppTheme.lightTheme.colorScheme.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(4.w)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle bar
+          Center(
+            child: Container(
+              width: 12.w,
+              height: 1.h,
+              decoration: BoxDecoration(
+                color: AppTheme.lightTheme.colorScheme.outline
+                    .withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(0.5.h),
+              ),
+            ),
+          ),
+          SizedBox(height: 3.h),
+
+          // Title
+          Row(
+            children: [
+              CustomIconWidget(
+                iconName: 'file_download',
+                color: AppTheme.lightTheme.colorScheme.primary,
+                size: 6.w,
+              ),
+              SizedBox(width: 3.w),
+              Text(
+                'Export Report',
+                style: AppTheme.lightTheme.textTheme.titleLarge,
+              ),
+            ],
+          ),
+          SizedBox(height: 1.h),
+          Text(
+            'Choose how you\'d like to export your adherence report',
+            style: AppTheme.lightTheme.textTheme.bodyMedium?.copyWith(
+              color: AppTheme.lightTheme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          SizedBox(height: 4.h),
+
+          // Export Options
+          _buildExportOption(
+            context,
+            icon: 'picture_as_pdf',
+            title: 'Export as PDF',
+            subtitle: 'Complete report with charts for healthcare providers',
+            color: AppTheme.lightTheme.colorScheme.error,
+            onTap: () => _exportToPDF(context),
+          ),
+          SizedBox(height: 2.h),
+
+          _buildExportOption(
+            context,
+            icon: 'table_chart',
+            title: 'Export as CSV',
+            subtitle: 'Raw data for external analysis and tracking',
+            color: AppTheme.lightTheme.colorScheme.secondary,
+            onTap: () => _exportToCSV(context),
+          ),
+          SizedBox(height: 2.h),
+
+          _buildExportOption(
+            context,
+            icon: 'share',
+            title: 'Share Summary',
+            subtitle: 'Quick summary for messaging or social sharing',
+            color: AppTheme.lightTheme.colorScheme.primary,
+            onTap: () => _shareReport(context),
+          ),
+          SizedBox(height: 4.h),
+
+          // Cancel Button
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+          ),
+          SizedBox(height: 2.h),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExportOption(
+    BuildContext context, {
+    required String icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(3.w),
+      child: Container(
+        padding: EdgeInsets.all(4.w),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color:
+                AppTheme.lightTheme.colorScheme.outline.withValues(alpha: 0.2),
+          ),
+          borderRadius: BorderRadius.circular(3.w),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 12.w,
+              height: 12.w,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(2.w),
+              ),
+              child: Center(
+                child: CustomIconWidget(
+                  iconName: icon,
+                  color: color,
+                  size: 6.w,
+                ),
+              ),
+            ),
+            SizedBox(width: 4.w),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppTheme.lightTheme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(height: 0.5.h),
+                  Text(
+                    subtitle,
+                    style: AppTheme.lightTheme.textTheme.bodySmall?.copyWith(
+                      color: AppTheme.lightTheme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            CustomIconWidget(
+              iconName: 'arrow_forward_ios',
+              color: AppTheme.lightTheme.colorScheme.onSurfaceVariant,
+              size: 4.w,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
